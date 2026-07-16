@@ -1,0 +1,25 @@
+name: contract-management
+
+services:
+  contract-management:
+    # 生产环境使用 Docker Hub 镜像，开发环境可取消注释下一行使用本地构建
+    # build: .
+    image: ${DOCKER_IMAGE:-contract-management:latest}
+    container_name: contract-management
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    volumes:
+      - contract_data:/data
+    environment:
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-change_me_in_production_please}
+      - JWT_EXPIRE_HOURS=${JWT_EXPIRE_HOURS:-8}
+      - UPLOAD_DIR=/data/uploads
+      - DATABASE_URL=sqlite:////data/contracts.db
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@contract.com}
+
+volumes:
+  contract_data:
+    driver: local
