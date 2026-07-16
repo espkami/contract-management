@@ -20,61 +20,70 @@
 
 ## 快速部署
 
-### 方式一: Docker Hub 拉取
+### 方式一: Portainer Stacks（推荐）
+
+1. 打开 Portainer → Stacks → Add Stack
+2. 填写名称: `contract-management`
+3. 在 Web editor 中粘贴以下内容：
+
+```yaml
+name: contract-management
+
+services:
+  contract-management:
+    image: ghcr.io/your-username/contract-management:latest
+    container_name: contract-management
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - contract_data:/data
+    environment:
+      - ADMIN_PASSWORD=your-admin-password
+
+volumes:
+  contract_data:
+    driver: local
+```
+
+4. 点击 "Deploy the stack"
+
+### 方式二: Docker 命令
 
 ```bash
-# 拉取镜像
-docker pull your-username/contract-management:latest
-
-# 创建数据目录
-mkdir -p data
-
-# 启动容器
 docker run -d \
   --name contract-management \
   -p 8000:8000 \
-  -v $(pwd)/data:/data \
-  your-username/contract-management:latest
-
-# 访问系统
-# http://localhost:8000
+  -v contract_data:/data \
+  -e ADMIN_PASSWORD=your-admin-password \
+  ghcr.io/your-username/contract-management:latest
 ```
 
-### 方式二: 本地构建
+### 方式三: 本地开发构建
 
 ```bash
-# 克隆仓库
 git clone https://github.com/your-username/contract-management.git
 cd contract-management
-
-# 复制环境变量配置
-cp .env.example .env
-# 编辑 .env 修改 JWT 密钥等配置（可选）
-
-# 构建并启动
 docker-compose up -d --build
-
-# 访问系统
-# http://localhost:8000
 ```
+
+## 环境变量
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| APP_PORT | 8000 | 映射端口 |
+| ADMIN_USERNAME | admin | 管理员用户名 |
+| ADMIN_PASSWORD | admin123 | 管理员密码（必须修改） |
+| ADMIN_EMAIL | admin@contract.com | 管理员邮箱 |
+
+> **注意**: JWT_SECRET_KEY 会在首次启动时自动生成并保存到数据库，无需手动配置。
 
 ## 默认账号
 
 首次启动后使用以下账号登录:
 
-- 用户名: `admin`
-- 密码: `admin123`
-
-> 建议在生产环境中修改默认密码
-
-## 环境变量
-
-在 `.env` 文件中可配置:
-
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| JWT_SECRET_KEY | change_me_in_production | JWT 签名密钥 |
-| JWT_EXPIRE_HOURS | 8 | Token 有效期（小时） |
+- 用户名: `admin`（可通过环境变量修改）
+- 密码: `admin123`（**生产环境务必修改**）
 
 ## 目录结构
 
@@ -82,41 +91,48 @@ docker-compose up -d --build
 contract-management/
 ├── app/
 │   ├── main.py          # 后端主程序
-│   ├── requirements.txt # Python 依赖
-│   └── static/          # 前端构建产物
+│   └── requirements.txt # Python 依赖
 ├── frontend/
 │   ├── src/             # Vue 3 源码
 │   ├── package.json
 │   └── vite.config.js
-├── data/                # 持久化数据（Docker 卷）
-│   ├── contracts.db     # SQLite 数据库
-│   └── uploads/         # 上传文件
+├── .github/
+│   └── workflows/
+│       └── docker-build.yml  # GitHub Actions 自动构建
 ├── Dockerfile
 ├── docker-compose.yml
 ├── .env.example
-└── .github/
-    └── workflows/
-        └── docker-build.yml  # 自动构建配置
+└── .gitignore
 ```
-
-## 自动提醒配置
-
-系统支持三种通知渠道:
-
-1. **邮件 SMTP**: 在「系统管理 → 通知配置」中填写 SMTP 服务器信息
-2. **企业微信**: 配置群机器人 Webhook 地址
-3. **Server酱**: 访问 sct.ftqq.com 获取 SendKey，推送到个人微信
-
-开启「自动提醒」开关后，系统每天自动检查快到期合同并发送通知。
 
 ## GitHub Actions 自动构建
 
-推送到 main/master 分支时自动构建 Docker 镜像并推送到 Docker Hub。
+推送到 main/master 分支时自动构建并推送到 **GitHub Container Registry (ghcr.io)**。
 
-需要在 GitHub 仓库设置中配置 Secrets:
+### 首次使用前的配置
 
-- `DOCKERHUB_USERNAME`: Docker Hub 用户名
-- `DOCKERHUB_TOKEN`: Docker Hub Access Token
+在 GitHub 仓库中开启 Packages 权限：
+1. 打开仓库 → Settings → Actions → General
+2. 在 **Workflow permissions** 部分，选择 **Read and write permissions**
+3. 点击 **Save**
+
+### 镜像地址
+
+镜像会被推送到：
+```
+ghcr.io/你的用户名/你的仓库名:latest
+```
+
+例如你的仓库是 `https://github.com/myusername/contract-management`，则镜像地址是：
+```
+ghcr.io/myusername/contract-management:latest
+```
+
+### 更新部署
+
+每次 push 代码后：
+1. GitHub Actions 自动构建并推送新镜像到 ghcr.io
+2. 在 Portainer 中点击 "Update stack" → "Re-pull image and redeploy"
 
 ## 许可证
 

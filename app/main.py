@@ -33,7 +33,6 @@ import asyncio
 
 # ========== 配置 ==========
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./data/contracts.db")
-JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "change_me_in_production")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 JWT_EXPIRE_HOURS = int(os.getenv("JWT_EXPIRE_HOURS", "8"))
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", "./data/uploads")
@@ -52,6 +51,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 # ========== 数据库模型 ==========
 Base = declarative_base()
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 import enum
@@ -116,7 +116,37 @@ class Setting(Base):
     value = Column(Text, nullable=True)
 
 # 创建表
+logging.info("[init] 创建数据库表...")
 Base.metadata.create_all(bind=engine)
+
+# ========== JWT 密钥自动生成 ==========
+def init_jwt_secret():
+    from sqlalchemy import text
+    env_key = os.getenv("JWT_SECRET_KEY")
+    if env_key and env_key != "change_me_in_production":
+        logging.info("[init] 使用环境变量中的 JWT 密钥")
+        return env_key
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text("SELECT value FROM settings WHERE key = 'jwt_secret_key'"))
+            row = result.first()
+            if row:
+                logging.info("[init] 从数据库读取 JWT 密钥")
+                return row[0]
+            import secrets
+            new_key = secrets.token_hex(32)
+            conn.execute(text("INSERT OR IGNORE INTO settings (key, value) VALUES ('jwt_secret_key', :key)"), {"key": new_key})
+            conn.commit()
+            logging.info("[init] 自动生成 JWT 密钥")
+            return new_key
+    except Exception as e:
+        logging.error(f"[init] JWT 密钥初始化失败: {e}")
+        import secrets
+        new_key = secrets.token_hex(32)
+        logging.info("[init] 使用内存生成的临时 JWT 密钥")
+        return new_key
+
+JWT_SECRET_KEY = init_jwt_secret()
 
 # ========== 自动迁移（为已存在的表补充新增列）==========
 def run_migrations():
