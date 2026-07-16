@@ -707,6 +707,7 @@ def stats(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
 def expiring_contracts(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     today = date.today()
     items = db.query(Contract).filter(
+        Contract.end_date >= today,
         Contract.end_date <= today + timedelta(days=30)
     ).order_by(Contract.end_date).limit(20).all()
     return [contract_dict(c) for c in items]
