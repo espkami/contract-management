@@ -15,6 +15,7 @@ const router = createRouter({
     { path: '/admin/users', component: () => import('../views/admin/Users.vue'), meta: { admin: true } },
     { path: '/admin/notifications', component: () => import('../views/admin/Notifications.vue'), meta: { admin: true } },
     { path: '/admin/settings', component: () => import('../views/admin/Settings.vue'), meta: { admin: true } },
+    { path: '/admin/backup', component: () => import('../views/admin/Backup.vue'), meta: { admin: true } },
   ]
 })
 

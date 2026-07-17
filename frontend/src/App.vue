@@ -90,6 +90,15 @@
               </svg>
               <span v-show="!sidebarCollapsed">通知配置</span>
             </router-link>
+
+            <router-link to="/admin/backup" class="nav-item" :class="{ active: $route.path === '/admin/backup' }">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              <span v-show="!sidebarCollapsed">系统备份</span>
+            </router-link>
           </div>
         </nav>
 

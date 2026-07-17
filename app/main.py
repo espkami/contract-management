@@ -11,6 +11,9 @@ import threading
 import urllib.request
 import urllib.error
 import urllib.parse
+import zipfile
+import shutil
+import io
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, date, timedelta, timezone
@@ -66,6 +69,7 @@ class ContractType(str, enum.Enum):
     maintenance = "维保合同"
     external_repair = "外修合同"
     decoration = "装修合同"
+    commercial = "商业合同"
 
 class ContractStatus(str, enum.Enum):
     active = "执行中"
@@ -1202,6 +1206,200 @@ def send_notification(body: NotificationSend, db: Session = Depends(get_db), _: 
         "serverchan_success": serverchan_success,
         "serverchan_errors": serverchan_errors
     }
+
+# ========== 系统备份 ==========
+def _get_db_path() -> str:
+    """从 DATABASE_URL 解析出 SQLite 文件路径"""
+    return DATABASE_URL.replace("sqlite:///", "")
+
+def _get_data_dir() -> str:
+    """获取 /data 目录"""
+    return os.path.dirname(_get_db_path())
+
+@app.get("/api/backup/export")
+def backup_export(_: User = Depends(require_admin)):
+    """导出系统备份（数据库 + 附件），返回 zip 文件"""
+    db_path = _get_db_path()
+    data_dir = _get_data_dir()
+    uploads_dir = UPLOAD_DIR
+
+    # 创建内存中的 zip
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+        # 添加数据库文件
+        if os.path.exists(db_path):
+            zf.write(db_path, "contracts.db")
+        # 添加 uploads 目录
+        if os.path.exists(uploads_dir):
+            for root, dirs, files in os.walk(uploads_dir):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    arcname = os.path.relpath(file_path, uploads_dir)
+                    zf.write(file_path, os.path.join("uploads", arcname))
+        # 添加备份信息
+        backup_info = {
+            "exported_at": datetime.now(timezone.utc).isoformat(),
+            "version": "2.0.0",
+            "db_file": "contracts.db",
+            "uploads_dir": "uploads"
+        }
+        zf.writestr("backup_info.json", json.dumps(backup_info, ensure_ascii=False, indent=2))
+
+    buffer.seek(0)
+    filename = f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+    return StreamingResponse(
+        buffer,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+@app.post("/api/backup/import")
+async def backup_import(file: UploadFile = File(...), _: User = Depends(require_admin)):
+    """导入系统备份（数据库 + 附件）"""
+    if not file.filename.endswith('.zip'):
+        raise HTTPException(status_code=400, detail="请上传 zip 格式的备份文件")
+
+    db_path = _get_db_path()
+    uploads_dir = UPLOAD_DIR
+    data_dir = _get_data_dir()
+
+    # 读取上传的 zip
+    content = await file.read()
+    zip_buffer = io.BytesIO(content)
+
+    try:
+        with zipfile.ZipFile(zip_buffer, 'r') as zf:
+            names = zf.namelist()
+            has_db = "contracts.db" in names
+            has_uploads = any(n.startswith("uploads/") for n in names)
+
+            if not has_db:
+                raise HTTPException(status_code=400, detail="备份文件中未找到数据库文件 contracts.db")
+
+            # 关闭数据库连接（通过释放 engine 连接池）
+            engine.dispose()
+
+            # 备份当前数据（以防导入失败）
+            backup_db_path = db_path + ".bak"
+            if os.path.exists(db_path):
+                shutil.copy2(db_path, backup_db_path)
+
+            backup_uploads_dir = uploads_dir + "_bak"
+            if os.path.exists(uploads_dir):
+                if os.path.exists(backup_uploads_dir):
+                    shutil.rmtree(backup_uploads_dir)
+                shutil.move(uploads_dir, backup_uploads_dir)
+
+            try:
+                # 解压数据库文件
+                with zf.open("contracts.db") as src:
+                    db_data = src.read()
+                with open(db_path, 'wb') as dst:
+                    dst.write(db_data)
+
+                # 解压 uploads 目录
+                os.makedirs(uploads_dir, exist_ok=True)
+                for name in names:
+                    if name.startswith("uploads/") and not name.endswith("/"):
+                        # 提取 uploads/ 之后的相对路径
+                        rel_path = name[len("uploads/"):]
+                        if not rel_path:
+                            continue
+                        target_path = os.path.join(uploads_dir, rel_path)
+                        os.makedirs(os.path.dirname(target_path), exist_ok=True)
+                        with zf.open(name) as src:
+                            with open(target_path, 'wb') as dst:
+                                dst.write(src.read())
+
+                # 删除备份
+                if os.path.exists(backup_db_path):
+                    os.remove(backup_db_path)
+                if os.path.exists(backup_uploads_dir):
+                    shutil.rmtree(backup_uploads_dir)
+
+            except Exception as e:
+                # 恢复备份
+                if os.path.exists(backup_db_path):
+                    shutil.copy2(backup_db_path, db_path)
+                    os.remove(backup_db_path)
+                if os.path.exists(backup_uploads_dir):
+                    if os.path.exists(uploads_dir):
+                        shutil.rmtree(uploads_dir)
+                    shutil.move(backup_uploads_dir, uploads_dir)
+                logging.error(f"备份导入失败: {str(e)}")
+                raise HTTPException(status_code=500, detail=f"备份导入失败: {str(e)}，已恢复原数据")
+
+        return {"message": "备份导入成功，请重新登录"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"备份导入异常: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"备份导入异常: {str(e)}")
+
+@app.post("/api/backup/clear")
+def backup_clear(_: User = Depends(require_admin)):
+    """清空所有合同数据（含附件），保留用户账号和系统配置"""
+    db = SessionLocal()
+    try:
+        # 删除通知记录
+        db.query(Notification).delete()
+        # 删除合同
+        db.query(Contract).delete()
+        db.commit()
+
+        # 清空 uploads 目录
+        if os.path.exists(UPLOAD_DIR):
+            for item in os.listdir(UPLOAD_DIR):
+                item_path = os.path.join(UPLOAD_DIR, item)
+                if os.path.isfile(item_path):
+                    os.remove(item_path)
+                elif os.path.isdir(item_path):
+                    shutil.rmtree(item_path)
+
+        return {"message": "所有合同数据已清空（用户账号和系统配置已保留）"}
+    except Exception as e:
+        db.rollback()
+        logging.error(f"清空数据失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"清空数据失败: {str(e)}")
+    finally:
+        db.close()
+
+@app.get("/api/backup/info")
+def backup_info(_: User = Depends(require_admin)):
+    """获取备份相关信息（数据库大小、附件数量等）"""
+    db_path = _get_db_path()
+    db_size = 0
+    if os.path.exists(db_path):
+        db_size = os.path.getsize(db_path)
+
+    uploads_count = 0
+    uploads_size = 0
+    if os.path.exists(UPLOAD_DIR):
+        for root, dirs, files in os.walk(UPLOAD_DIR):
+            for f in files:
+                file_path = os.path.join(root, f)
+                uploads_count += 1
+                uploads_size += os.path.getsize(file_path)
+
+    # 合同数量
+    db = SessionLocal()
+    try:
+        contract_count = db.query(Contract).count()
+        user_count = db.query(User).count()
+    finally:
+        db.close()
+
+    return {
+        "db_size": db_size,
+        "db_size_mb": round(db_size / 1024 / 1024, 2),
+        "uploads_count": uploads_count,
+        "uploads_size": uploads_size,
+        "uploads_size_mb": round(uploads_size / 1024 / 1024, 2),
+        "contract_count": contract_count,
+        "user_count": user_count
+    }
+
 
 # ========== 静态文件（前端 SPA） ==========
 from starlette.responses import FileResponse as StarletteFileResponse

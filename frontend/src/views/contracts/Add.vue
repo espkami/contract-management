@@ -44,6 +44,7 @@
                 <option value="维保合同">维保合同</option>
                 <option value="外修合同">外修合同</option>
                 <option value="装修合同">装修合同</option>
+                <option value="商业合同">商业合同</option>
               </select>
             </div>
           </div>
