@@ -7,6 +7,8 @@ export const useAuthStore = defineStore('auth', () => {
   const user = ref(JSON.parse(localStorage.getItem('user') || 'null'))
 
   const isAdmin = computed(() => user.value?.role === 'admin')
+  const isManager = computed(() => user.value?.role === 'manager')
+  const canManage = computed(() => user.value?.role === 'admin' || user.value?.role === 'manager')
 
   async function login(username, password) {
     const form = new FormData()
@@ -27,5 +29,5 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('user')
   }
 
-  return { token, user, isAdmin, login, logout }
+  return { token, user, isAdmin, isManager, canManage, login, logout }
 })

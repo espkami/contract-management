@@ -8,9 +8,9 @@ const router = createRouter({
     { path: '/', redirect: '/dashboard' },
     { path: '/dashboard', component: () => import('../views/Dashboard.vue') },
     { path: '/contracts', component: () => import('../views/contracts/List.vue') },
-    { path: '/contracts/add', component: () => import('../views/contracts/Add.vue') },
+    { path: '/contracts/add', component: () => import('../views/contracts/Add.vue'), meta: { manager: true } },
     { path: '/contracts/:id', component: () => import('../views/contracts/Detail.vue') },
-    { path: '/contracts/:id/edit', component: () => import('../views/contracts/Add.vue') },
+    { path: '/contracts/:id/edit', component: () => import('../views/contracts/Add.vue'), meta: { manager: true } },
     { path: '/expiry-alert', component: () => import('../views/ExpiryAlert.vue') },
     { path: '/admin/users', component: () => import('../views/admin/Users.vue'), meta: { admin: true } },
     { path: '/admin/notifications', component: () => import('../views/admin/Notifications.vue'), meta: { admin: true } },
@@ -23,6 +23,7 @@ router.beforeEach((to) => {
   const auth = useAuthStore()
   if (!to.meta.public && !auth.token) return '/login'
   if (to.meta.admin && auth.user?.role !== 'admin') return '/dashboard'
+  if (to.meta.manager && !auth.canManage) return '/dashboard'
 })
 
 export default router

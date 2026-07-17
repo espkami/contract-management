@@ -3,7 +3,7 @@
     <!-- Toolbar -->
     <div class="toolbar">
       <div class="toolbar-left">
-        <router-link to="/contracts/add" class="btn-primary">
+        <router-link v-if="auth.canManage" to="/contracts/add" class="btn-primary">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="12" y1="5" x2="12" y2="19"/>
             <line x1="5" y1="12" x2="19" y2="12"/>
@@ -73,7 +73,7 @@
             </td>
             <td class="text-center">
               <router-link :to="`/contracts/${contract.id}`" class="action-link">查看</router-link>
-              <router-link :to="`/contracts/${contract.id}/edit`" class="action-link">编辑</router-link>
+              <router-link v-if="auth.canManage" :to="`/contracts/${contract.id}/edit`" class="action-link">编辑</router-link>
             </td>
           </tr>
         </tbody>
@@ -112,8 +112,10 @@ import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import api from '../../api/index'
+import { useAuthStore } from '../../stores/auth'
 
 const route = useRoute()
+const auth = useAuthStore()
 const list = ref([])
 const total = ref(0)
 const loading = ref(false)

@@ -240,6 +240,12 @@ def require_admin(current_user: User = Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="需要管理员权限")
     return current_user
 
+def require_manager(current_user: User = Depends(get_current_user)):
+    """需要管理员或经理权限（用于合同增删改）"""
+    if current_user.role not in ("admin", "manager"):
+        raise HTTPException(status_code=403, detail="需要管理员或经理权限")
+    return current_user
+
 def calc_status(c: Contract) -> str:
     today = date.today()
     if c.end_date < today:
@@ -772,7 +778,7 @@ def parse_date(date_str: str):
 
 @app.post("/api/contracts/")
 def create_contract(body: ContractCreate, db: Session = Depends(get_db),
-                    current_user: User = Depends(get_current_user)):
+                    current_user: User = Depends(require_manager)):
     if db.query(Contract).filter(Contract.contract_no == body.contract_no).first():
         raise HTTPException(status_code=400, detail="合同编号已存在")
     c = Contract(
@@ -801,7 +807,7 @@ def get_contract(cid: int, db: Session = Depends(get_db), _: User = Depends(get_
 
 @app.put("/api/contracts/{cid}")
 def update_contract(cid: int, body: ContractCreate, db: Session = Depends(get_db),
-                    _: User = Depends(get_current_user)):
+                    _: User = Depends(require_manager)):
     c = db.query(Contract).filter(Contract.id == cid).first()
     if not c:
         raise HTTPException(status_code=404, detail="合同不存在")
@@ -815,7 +821,7 @@ def update_contract(cid: int, body: ContractCreate, db: Session = Depends(get_db
     return contract_dict(c)
 
 @app.delete("/api/contracts/{cid}")
-def delete_contract(cid: int, db: Session = Depends(get_db), _: User = Depends(require_admin)):
+def delete_contract(cid: int, db: Session = Depends(get_db), _: User = Depends(require_manager)):
     c = db.query(Contract).filter(Contract.id == cid).first()
     if not c:
         raise HTTPException(status_code=404, detail="合同不存在")
