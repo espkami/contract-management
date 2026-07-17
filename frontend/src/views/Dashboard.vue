@@ -305,7 +305,7 @@ onMounted(async () => {
       api.get('/api/contracts/monthly-trend')
     ])
     if (statsRes.data) stats.value = statsRes.data
-    if (contractsRes.data) expiringContracts.value = contractsRes.data.slice(0, 5)
+    if (contractsRes.data) expiringContracts.value = contractsRes.data.filter(c => c.days_left > 0).slice(0, 5)
     if (trendRes.data) {
       monthlyData.value = trendRes.data
       const maxValue = Math.max(...monthlyData.value.map(m => m.value)) || 1

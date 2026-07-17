@@ -32,10 +32,10 @@ import aiosqlite
 import asyncio
 
 # ========== 配置 ==========
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./data/contracts.db")
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:////data/contracts.db")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 JWT_EXPIRE_HOURS = int(os.getenv("JWT_EXPIRE_HOURS", "8"))
-UPLOAD_DIR = os.getenv("UPLOAD_DIR", "./data/uploads")
+UPLOAD_DIR = os.getenv("UPLOAD_DIR", "/data/uploads")
 SMTP_HOST = os.getenv("SMTP_HOST", "")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "465"))
 SMTP_USER = os.getenv("SMTP_USER", "")
